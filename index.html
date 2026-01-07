@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Isolation Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            touch-action: none; /* Prevent scrolling on mobile while playing */
+        }
+
+        canvas {
+            touch-action: none;
+        }
+
+        .player-badge {
+            transition: all 0.3s ease;
+        }
+        
+        .active-turn {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-weight: 800;
+        }
+
+        .inactive-turn {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+
+        /* Custom Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -8px; 
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <!-- Header / Controls -->
+    <div class="bg-white shadow-sm z-10 p-4 md:p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">GRAPH ISOLATION</h1>
+            <p class="text-sm text-slate-500 hidden md:block">Isolate a node to win immediately.</p>
+        </div>
+
+        <!-- Player Status -->
+        <div class="flex items-center gap-8 bg-slate-50 px-6 py-2 rounded-full border border-slate-200">
+            <div id="badge-alice" class="player-badge flex items-center gap-2 text-blue-600 active-turn">
+                <div class="w-3 h-3 rounded-full bg-blue-600"></div>
+                ALICE
+            </div>
+            <div class="text-slate-300 font-light">vs</div>
+            <div id="badge-bob" class="player-badge flex items-center gap-2 text-red-500 inactive-turn">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                BOB
+            </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="flex items-center gap-4">
+            <div class="flex flex-col items-end">
+                <label for="nodeRange" class="text-xs font-bold text-slate-400 uppercase">Nodes (N)</label>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold w-4" id="nodeCountVal">5</span>
+                    <input type="range" id="nodeRange" min="3" max="10" value="5" class="w-24">
+                </div>
+            </div>
+            <button id="undoBtn" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-semibold text-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/>
+                    <path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/>
+                </svg>
+                Undo
+            </button>
+            <button id="resetBtn" class="bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors">
+                New Game
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Game Area -->
+    <div class="flex-1 relative bg-slate-100 flex items-center justify-center cursor-crosshair overflow-hidden" id="canvasContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Victory Overlay -->
+        <div id="victoryOverlay" class="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+            <div class="text-center transform scale-95 transition-transform duration-300" id="victoryModal">
+                <div class="text-xl text-slate-500 font-bold tracking-widest uppercase mb-2">Game Over</div>
+                <div class="text-6xl font-black mb-6" id="winnerText">ALICE WINS</div>
+                <button id="playAgainBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-lg px-8 py-3 rounded-full shadow-lg font-bold transition-transform hover:scale-105 active:scale-95">
+                    Play Again
+                </button>
+            </div>
+        </div>
+
+        <!-- Instructions Overlay (Mobile/Initial) -->
+        <div id="tip" class="absolute bottom-6 bg-white/90 px-4 py-2 rounded-full text-sm font-medium text-slate-500 shadow-sm border border-slate-200 pointer-events-none">
+            Click an edge to remove it
+        </div>
+    </div>
+
+<script>
+class GraphGame {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.container = document.getElementById('canvasContainer');
+        
+        // Game State
+        this.n = 5;
+        this.nodes = [];
+        this.edges = [];
+        this.history = []; // History stack for Undo
+        this.turn = 'Alice'; // Alice or Bob
+        this.gameOver = false;
+        this.hoveredEdge = null;
+
+        // Visual Config
+        this.radius = 0; // Calculated based on screen size
+        this.nodeRadius = 20;
+        this.centerX = 0;
+        this.centerY = 0;
+        
+        // Bindings
+        this.handleResize = this.handleResize.bind(this);
+        this.handleMouseMove = this.handleMouseMove.bind(this);
+        this.handleClick = this.handleClick.bind(this);
+        this.handleUndo = this.handleUndo.bind(this);
+        
+        // Init
+        window.addEventListener('resize', this.handleResize);
+        this.canvas.addEventListener('mousemove', this.handleMouseMove);
+        this.canvas.addEventListener('click', this.handleClick);
+        
+        // Touch support (simple mapping to click/move)
+        this.canvas.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent("mousemove", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            this.canvas.dispatchEvent(mouseEvent);
+        }, {passive: false});
+
+        this.canvas.addEventListener('touchend', (e) => {
+             // Prevent default ghost clicks but allow interaction
+             e.preventDefault();
+             if(this.hoveredEdge) this.handleClick();
+        }, {passive: false});
+
+        this.handleResize();
+        this.initGame(5);
+    }
+
+    initGame(n) {
+        this.n = parseInt(n);
+        this.nodes = [];
+        this.edges = [];
+        this.history = []; // Reset history
+        this.turn = 'Alice';
+        this.gameOver = false;
+        
+        this.calculateLayout();
+        this.generateGraph();
+        this.updateUI();
+        this.draw();
+        
+        document.getElementById('victoryOverlay').classList.add('opacity-0', 'pointer-events-none');
+        document.getElementById('victoryModal').classList.remove('scale-100');
+        document.getElementById('victoryModal').classList.add('scale-95');
+    }
+
+    calculateLayout() {
+        this.canvas.width = this.container.clientWidth;
+        this.canvas.height = this.container.clientHeight;
+        this.centerX = this.canvas.width / 2;
+        this.centerY = this.canvas.height / 2;
+        // Radius is smaller of width/height minus padding
+        this.radius = Math.min(this.canvas.width, this.canvas.height) * 0.35;
+    }
+
+    handleResize() {
+        this.calculateLayout();
+        // Re-calculate node positions based on new size
+        if(this.nodes.length > 0) {
+            const angleStep = (Math.PI * 2) / this.n;
+            this.nodes.forEach((node, i) => {
+                const angle = i * angleStep - Math.PI / 2; // Start at top
+                node.x = this.centerX + Math.cos(angle) * this.radius;
+                node.y = this.centerY + Math.sin(angle) * this.radius;
+            });
+        }
+        this.draw();
+    }
+
+    generateGraph() {
+        // Create Nodes
+        const angleStep = (Math.PI * 2) / this.n;
+        for (let i = 0; i < this.n; i++) {
+            const angle = i * angleStep - Math.PI / 2;
+            this.nodes.push({
+                id: i,
+                x: this.centerX + Math.cos(angle) * this.radius,
+                y: this.centerY + Math.sin(angle) * this.radius,
+                degree: this.n - 1 // Complete graph initial degree
+            });
+        }
+
+        // Create Edges (Complete Graph)
+        for (let i = 0; i < this.n; i++) {
+            for (let j = i + 1; j < this.n; j++) {
+                this.edges.push({
+                    u: i,
+                    v: j,
+                    active: true,
+                    opacity: 1
+                });
+            }
+        }
+    }
+
+    getMousePos(evt) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: evt.clientX - rect.left,
+            y: evt.clientY - rect.top
+        };
+    }
+
+    // Distance from point (px, py) to line segment (x1, y1)-(x2, y2)
+    distToSegment(px, py, x1, y1, x2, y2) {
+        const l2 = (x1 - x2) ** 2 + (y1 - y2) ** 2;
+        if (l2 === 0) return Math.hypot(px - x1, py - y1);
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+    }
+
+    handleMouseMove(e) {
+        if (this.gameOver) return;
+
+        const pos = this.getMousePos(e);
+        let minDist = Infinity;
+        let closestEdge = null;
+
+        // Tolerance for selection in pixels
+        const threshold = 15;
+
+        this.edges.forEach(edge => {
+            if (!edge.active) return;
+            
+            const n1 = this.nodes[edge.u];
+            const n2 = this.nodes[edge.v];
+            
+            const dist = this.distToSegment(pos.x, pos.y, n1.x, n1.y, n2.x, n2.y);
+            
+            if (dist < threshold && dist < minDist) {
+                minDist = dist;
+                closestEdge = edge;
+            }
+        });
+
+        const prevHover = this.hoveredEdge;
+        this.hoveredEdge = closestEdge;
+
+        if (prevHover !== this.hoveredEdge) {
+            this.canvas.style.cursor = this.hoveredEdge ? 'pointer' : 'crosshair';
+            this.draw();
+        }
+    }
+
+    handleClick() {
+        if (this.gameOver || !this.hoveredEdge) return;
+
+        const edge = this.hoveredEdge;
+
+        // Remove Edge
+        edge.active = false;
+        
+        // Update Degrees
+        const u = this.nodes[edge.u];
+        const v = this.nodes[edge.v];
+        u.degree--;
+        v.degree--;
+
+        let causedWin = false;
+
+        // Check Win Condition
+        if (u.degree === 0 || v.degree === 0) {
+            causedWin = true;
+            this.triggerWin(this.turn);
+        } else {
+            // Switch Turn
+            this.turn = this.turn === 'Alice' ? 'Bob' : 'Alice';
+        }
+        
+        // Save move to history
+        this.history.push({ edge: edge, wasWin: causedWin });
+
+        this.updateUI();
+        this.hoveredEdge = null; // Clear selection
+        this.draw();
+    }
+
+    handleUndo() {
+        if (this.history.length === 0) return;
+
+        const lastMove = this.history.pop();
+        const edge = lastMove.edge;
+        
+        // Restore Edge
+        edge.active = true;
+        
+        // Restore Degrees
+        this.nodes[edge.u].degree++;
+        this.nodes[edge.v].degree++;
+
+        // Restore Game State
+        if (lastMove.wasWin) {
+            this.gameOver = false;
+            // Hide victory overlay
+            document.getElementById('victoryOverlay').classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('victoryModal').classList.remove('scale-100');
+            document.getElementById('victoryModal').classList.add('scale-95');
+            // Turn remains with the winner (who is now the current player again), so we don't switch logic,
+            // but effectively we are back to their turn.
+        } else {
+            // Switch Turn back
+            this.turn = this.turn === 'Alice' ? 'Bob' : 'Alice';
+        }
+
+        this.updateUI();
+        this.draw();
+    }
+
+    triggerWin(winner) {
+        this.gameOver = true;
+        
+        const overlay = document.getElementById('victoryOverlay');
+        const modal = document.getElementById('victoryModal');
+        const text = document.getElementById('winnerText');
+        
+        text.innerText = `${winner.toUpperCase()} WINS!`;
+        text.className = `text-6xl font-black mb-6 ${winner === 'Alice' ? 'text-blue-600' : 'text-red-500'}`;
+        
+        overlay.classList.remove('opacity-0', 'pointer-events-none');
+        modal.classList.remove('scale-95');
+        modal.classList.add('scale-100');
+    }
+
+    updateUI() {
+        const aliceBadge = document.getElementById('badge-alice');
+        const bobBadge = document.getElementById('badge-bob');
+        const undoBtn = document.getElementById('undoBtn');
+
+        // Update badges
+        if (this.turn === 'Alice') {
+            aliceBadge.className = 'player-badge flex items-center gap-2 text-blue-600 active-turn';
+            bobBadge.className = 'player-badge flex items-center gap-2 text-red-500 inactive-turn';
+        } else {
+            aliceBadge.className = 'player-badge flex items-center gap-2 text-blue-600 inactive-turn';
+            bobBadge.className = 'player-badge flex items-center gap-2 text-red-500 active-turn';
+        }
+
+        // Update Undo Button
+        undoBtn.disabled = this.history.length === 0;
+        if (this.history.length === 0) {
+            undoBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            undoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+
+    draw() {
+        // Clear background
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw Edges
+        this.edges.forEach(edge => {
+            if (!edge.active) return;
+            
+            const n1 = this.nodes[edge.u];
+            const n2 = this.nodes[edge.v];
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(n1.x, n1.y);
+            this.ctx.lineTo(n2.x, n2.y);
+            
+            if (edge === this.hoveredEdge) {
+                this.ctx.lineWidth = 6;
+                this.ctx.strokeStyle = this.turn === 'Alice' ? 'rgba(37, 99, 235, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+                this.ctx.stroke();
+                
+                // Solid inner line
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeStyle = this.turn === 'Alice' ? '#2563eb' : '#ef4444';
+                this.ctx.stroke();
+            } else {
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeStyle = '#cbd5e1'; // slate-300
+                this.ctx.stroke();
+            }
+        });
+
+        // Draw Nodes
+        this.nodes.forEach(node => {
+            this.ctx.beginPath();
+            this.ctx.arc(node.x, node.y, this.nodeRadius, 0, Math.PI * 2);
+            
+            // Check for danger (degree 1)
+            if (node.degree === 1) {
+                 this.ctx.fillStyle = '#fef08a'; // Yellow alert
+                 this.ctx.strokeStyle = '#eab308';
+            } else if (node.degree === 0) {
+                 this.ctx.fillStyle = '#22c55e'; // Green (Isolated/Win cause)
+                 this.ctx.strokeStyle = '#15803d';
+            } else {
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.strokeStyle = '#475569';
+            }
+
+            // Highlight node if part of hovered edge
+            if (this.hoveredEdge) {
+                if (this.hoveredEdge.u === node.id || this.hoveredEdge.v === node.id) {
+                     this.ctx.fillStyle = this.turn === 'Alice' ? '#eff6ff' : '#fef2f2';
+                     this.ctx.strokeStyle = this.turn === 'Alice' ? '#2563eb' : '#ef4444';
+                }
+            }
+
+            this.ctx.lineWidth = 3;
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Draw Degree Text
+            this.ctx.fillStyle = '#64748b';
+            this.ctx.font = 'bold 14px Inter';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(node.degree, node.x, node.y);
+        });
+    }
+}
+
+// DOM Setup
+const game = new GraphGame();
+
+// Controls
+const rangeInput = document.getElementById('nodeRange');
+const countDisplay = document.getElementById('nodeCountVal');
+const resetBtn = document.getElementById('resetBtn');
+const undoBtn = document.getElementById('undoBtn');
+const playAgainBtn = document.getElementById('playAgainBtn');
+
+rangeInput.addEventListener('input', (e) => {
+    countDisplay.innerText = e.target.value;
+    game.initGame(e.target.value);
+});
+
+resetBtn.addEventListener('click', () => {
+    game.initGame(rangeInput.value);
+});
+
+undoBtn.addEventListener('click', () => {
+    game.handleUndo();
+});
+
+playAgainBtn.addEventListener('click', () => {
+    game.initGame(rangeInput.value);
+});
+
+</script>
+</body>
+</html>
