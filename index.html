@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Edge Master: Invincible AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -10,8 +10,8 @@
             font-family: 'Inter', system-ui, sans-serif; 
             color: #e2e8f0; 
             user-select: none; 
-            overflow: hidden; 
             transition: background-color 1.5s ease;
+            -webkit-tap-highlight-color: transparent;
         }
         
         /* Modern Canvas Container */
@@ -22,6 +22,8 @@
             position: relative;
             overflow: hidden;
             transition: box-shadow 1s ease;
+            /* Mobile Aspect Ratio */
+            min-height: 350px;
         }
 
         canvas { 
@@ -63,30 +65,53 @@
         .theme-bob { background-color: #022c22; background-image: radial-gradient(circle at 50% 0%, #064e3b 0%, #022c22 70%); }
     </style>
 </head>
-<body id="mainBody" class="h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative">
+<!-- Removed h-screen to allow scrolling on mobile, added min-h-screen -->
+<body id="mainBody" class="min-h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative overflow-y-auto lg:overflow-hidden">
 
     <!-- Header -->
-    <div class="w-full max-w-7xl flex flex-col md:flex-row justify-between items-end gap-6 z-10">
+    <div class="w-full max-w-7xl flex flex-col md:flex-row justify-between items-end gap-4 z-10 shrink-0">
         <div>
-            <h1 class="text-6xl font-black text-white tracking-tighter mb-1 drop-shadow-lg">EDGE <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">MASTER</span></h1>
-            <p class="text-slate-400 text-sm font-medium tracking-[0.2em] uppercase">Invincible Isolation Engine</p>
+            <h1 class="text-4xl md:text-6xl font-black text-white tracking-tighter mb-1 drop-shadow-lg">EDGE <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">MASTER</span></h1>
+            <p class="text-slate-400 text-xs md:text-sm font-medium tracking-[0.2em] uppercase">Invincible Isolation Engine</p>
         </div>
 
-        <!-- Hidden Stats (Kept for Logic Compatibility) -->
+        <!-- Hidden Stats -->
         <div class="hidden gap-4">
             <div id="visit-count"></div>
             <div id="win-rate"></div>
         </div>
     </div>
 
-    <!-- Main Layout -->
-    <div class="flex flex-col lg:flex-row gap-6 w-full max-w-7xl flex-1 min-h-0 relative z-10">
+    <!-- Main Layout: flex-col-reverse for Mobile (Game Top, Settings Bottom) -->
+    <div class="flex flex-col-reverse lg:flex-row gap-6 w-full max-w-7xl flex-1 min-h-0 relative z-10">
         
-        <!-- Sidebar -->
+        <!-- Sidebar (Controls) -->
         <div class="w-full lg:w-80 flex flex-col gap-4 z-10 shrink-0">
             
-            <!-- Controls -->
-            <div class="panel-card flex flex-col gap-6">
+            <!-- AI Status (Visible on Mobile) -->
+            <div class="panel-card flex-1 flex flex-col justify-center items-center text-center relative transition-colors duration-1000 order-1 lg:order-2" id="status-panel">
+                <div id="ai-avatar" class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 flex items-center justify-center mb-4 relative shadow-2xl transition-all duration-500">
+                    <div class="text-3xl md:text-4xl">🤖</div>
+                    <div id="ai-pulse" class="absolute inset-0 rounded-full border-2 border-purple-500 opacity-0"></div>
+                </div>
+                
+                <div class="text-lg font-bold text-white mb-1" id="turn-text">Your Turn</div>
+                <div class="text-xs text-slate-400 font-medium" id="sub-text">Tap to cut a connection</div>
+                
+                <!-- Thinking Bar -->
+                <div id="thinking-ui" class="w-full mt-4 md:mt-6 opacity-0 transition-opacity duration-300">
+                    <div class="flex justify-between text-[10px] text-purple-300 font-bold tracking-widest mb-2">
+                        <span>CALCULATING</span>
+                        <span id="progress-text">0%</span>
+                    </div>
+                    <div class="thinking-bar-bg">
+                        <div id="thinking-bar" class="thinking-bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls (Bottom on Mobile) -->
+            <div class="panel-card flex flex-col gap-6 order-2 lg:order-1">
                 <div>
                     <div class="flex justify-between items-center mb-3">
                         <label class="text-xs font-bold text-slate-400 uppercase tracking-widest">Map Size</label>
@@ -99,7 +124,6 @@
                     </div>
                 </div>
 
-                <!-- Hidden Difficulty -->
                 <input type="hidden" id="simBudget" value="100000">
 
                 <div class="flex items-center gap-3 bg-black/20 p-3 rounded-xl border border-white/5">
@@ -113,41 +137,19 @@
                     <span class="group-hover:rotate-180 transition-transform duration-500">↻</span> START NEW GAME
                 </button>
             </div>
-
-            <!-- AI Status -->
-            <div class="panel-card flex-1 flex flex-col justify-center items-center text-center relative transition-colors duration-1000" id="status-panel">
-                <div id="ai-avatar" class="w-20 h-20 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 flex items-center justify-center mb-4 relative shadow-2xl transition-all duration-500">
-                    <div class="text-4xl">🤖</div>
-                    <div id="ai-pulse" class="absolute inset-0 rounded-full border-2 border-purple-500 opacity-0"></div>
-                </div>
-                
-                <div class="text-lg font-bold text-white mb-1" id="turn-text">Your Turn</div>
-                <div class="text-xs text-slate-400 font-medium" id="sub-text">Click a connection to cut</div>
-                
-                <!-- Thinking Bar -->
-                <div id="thinking-ui" class="w-full mt-6 opacity-0 transition-opacity duration-300">
-                    <div class="flex justify-between text-[10px] text-purple-300 font-bold tracking-widest mb-2">
-                        <span>CALCULATING</span>
-                        <span id="progress-text">0%</span>
-                    </div>
-                    <div class="thinking-bar-bg">
-                        <div id="thinking-bar" class="thinking-bar"></div>
-                    </div>
-                </div>
-            </div>
             
-            <button id="clearBrain" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors text-center pb-2">Reset AI Memory</button>
+            <button id="clearBrain" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors text-center pb-2 order-3">Reset AI Memory</button>
         </div>
 
         <!-- Canvas -->
-        <div class="flex-1 canvas-container flex items-center justify-center" id="game-container">
-            <canvas id="gameCanvas"></canvas>
+        <div class="flex-1 canvas-container flex items-center justify-center h-[400px] lg:h-auto w-full" id="game-container">
+            <canvas id="gameCanvas" class="w-full h-full"></canvas>
             
             <!-- Result Overlay -->
             <div id="overlay" class="absolute inset-0 bg-slate-900/95 backdrop-blur-xl flex flex-col items-center justify-center z-20 opacity-0 pointer-events-none transition-all duration-500 scale-95">
                 <div id="overlay-icon" class="text-6xl mb-4">🏆</div>
-                <h2 id="overlayTitle" class="text-5xl lg:text-7xl font-black text-white mb-4 tracking-tighter drop-shadow-2xl text-center">YOU WON</h2>
-                <p id="overlaySub" class="text-slate-400 text-lg font-medium mb-10 tracking-wide">You outsmarted the AI.</p>
+                <h2 id="overlayTitle" class="text-4xl md:text-7xl font-black text-white mb-4 tracking-tighter drop-shadow-2xl text-center">YOU WON</h2>
+                <p id="overlaySub" class="text-slate-400 text-base md:text-lg font-medium mb-10 tracking-wide">You outsmarted the AI.</p>
                 <button id="playAgainBtn" class="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-full shadow-2xl hover:scale-105 transition-transform active:scale-95 text-lg tracking-wide">
                     PLAY AGAIN
                 </button>
@@ -156,7 +158,7 @@
     </div>
 
     <!-- Footer Reference -->
-    <div class="absolute bottom-2 w-full text-center z-0 pointer-events-none">
+    <div class="w-full text-center py-4 z-0 pointer-events-none">
         <p class="text-[10px] text-slate-600 font-medium pointer-events-auto">
             This game is based on the question at <a href="https://puzzling.stackexchange.com/questions/131519/edge-removal-game" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-purple-400 transition-colors underline decoration-slate-700 underline-offset-2">StackExchange</a>
         </p>
@@ -442,9 +444,6 @@ const ui = {
     overlaySub: document.getElementById('overlaySub'),
     overlayIcon: document.getElementById('overlay-icon'),
     
-    statsVisit: document.getElementById('visit-count'),
-    statsWin: document.getElementById('win-rate'),
-    
     aiVsAi: document.getElementById('aiVsAi')
 };
 
@@ -468,8 +467,10 @@ function resizeCanvas() {
     
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
+    // Keep CSS size matched
+    // No explicit style width needed if container handles it, 
+    // but useful for clarity.
+    
     ctx.scale(dpr, dpr);
     
     if(game.nodes.length > 0) {
@@ -481,11 +482,14 @@ window.addEventListener('resize', resizeCanvas);
 
 function initNodePositions() {
     game.nodes = [];
-    const width = canvas.width / (window.devicePixelRatio || 1);
-    const height = canvas.height / (window.devicePixelRatio || 1);
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    
     const r = Math.min(width, height) * 0.35;
     const cx = width/2;
     const cy = height/2;
+    
     for(let i=0; i<game.n; i++) {
         const a = (i * 2 * Math.PI / game.n) - Math.PI/2;
         game.nodes.push({x: cx + Math.cos(a)*r, y: cy + Math.sin(a)*r});
@@ -494,10 +498,10 @@ function initNodePositions() {
 
 function updateTheme(turn) {
     if (turn === 0) { // Alice (AI)
-        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative";
+        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative overflow-y-auto lg:overflow-hidden";
         ui.gameContainer.style.boxShadow = "inset 0 0 40px rgba(168, 85, 247, 0.1)";
     } else { // Bob (Player)
-        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-bob relative";
+        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-bob relative overflow-y-auto lg:overflow-hidden";
         ui.gameContainer.style.boxShadow = "inset 0 0 40px rgba(16, 185, 129, 0.1)";
     }
 }
@@ -530,7 +534,7 @@ function setAIState(state) {
         
         ui.turnText.innerText = "Your Turn";
         ui.turnText.className = "text-lg font-bold text-emerald-400 mb-1";
-        ui.subText.innerText = "Click to cut a connection";
+        ui.subText.innerText = "Tap a connection to cut";
         ui.thinkingUI.classList.add('opacity-0');
         canvas.style.cursor = "crosshair";
     }
@@ -547,9 +551,6 @@ function startGame() {
     game.gameOver = false;
     
     ui.overlay.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
-    // Stats are hidden by CSS now, but updating them anyway in case logic needs them
-    ui.statsVisit.innerText = brain.memory ? Object.keys(brain.memory).length : 0;
-    ui.statsWin.innerText = "--";
     
     initNodePositions();
     drawLoop(); // Start loop
@@ -585,10 +586,6 @@ async function runAITurn(sessionId) {
             bestChild = child;
         }
     }
-
-    ui.statsVisit.innerText = Object.keys(brain.memory).length.toLocaleString();
-    const qVal = 1.0 - (bestChild.wins / bestChild.visits);
-    ui.statsWin.innerText = `%${(qVal * 100).toFixed(1)}`;
 
     game.history.push({
         hash: game.engine.rootState.getHash(game.turn),
@@ -639,21 +636,21 @@ function endGame(winner) {
     if (winner === 0) { 
         ui.overlayTitle.innerText = "DEFEATED";
         ui.overlaySub.innerText = "The AI outsmarted you.";
-        ui.overlayTitle.className = "text-6xl font-black text-red-500 mb-4 tracking-tighter";
+        ui.overlayTitle.className = "text-5xl lg:text-7xl font-black text-red-500 mb-4 tracking-tighter drop-shadow-2xl text-center";
         ui.overlayIcon.innerText = "💀";
     } else { 
         ui.overlayTitle.innerText = "LEGENDARY VICTORY";
         ui.overlaySub.innerText = "You defeated the Invincible AI!";
-        ui.overlayTitle.className = "text-6xl font-black text-emerald-400 mb-4 tracking-tighter";
+        ui.overlayTitle.className = "text-5xl lg:text-7xl font-black text-emerald-400 mb-4 tracking-tighter drop-shadow-2xl text-center";
         ui.overlayIcon.innerText = "🏆";
     }
 }
 
 // Interaction
-function getEdgeAt(x, y) {
-    let best = null, minDist = 40; 
+function getEdgeAt(x, y, tolerance = 30) {
+    let best = null, minDist = tolerance; 
     const state = game.engine.rootState;
-    const dpr = window.devicePixelRatio || 1;
+    // Input x, y are CSS pixels relative to canvas
     
     for (let i=0; i<state.num_edges; i++) {
         if (!((state.activeMask >> BigInt(i)) & 1n)) continue;
@@ -669,6 +666,46 @@ function getEdgeAt(x, y) {
     return best;
 }
 
+// TOUCH EVENTS
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault(); // Stop scroll
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    const move = getEdgeAt(x, y, 60); // Higher tolerance for touch
+    game.hoveredEdge = move;
+    draw(); // Draw highlight
+}, {passive: false});
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault(); // Stop scroll/zoom
+    if (game.turn === 0 || game.gameOver) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    const move = getEdgeAt(x, y, 60);
+    if (move !== game.hoveredEdge) {
+        game.hoveredEdge = move;
+        draw();
+    }
+}, {passive: false});
+
+canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    if (game.gameOver || game.turn === 0) return;
+    
+    if (game.hoveredEdge !== null) {
+        applyMove(game.hoveredEdge);
+        game.hoveredEdge = null;
+    }
+}, {passive: false});
+
+// MOUSE EVENTS
 canvas.addEventListener('mousemove', e => {
     if (game.turn === 0 || game.gameOver) return;
     const r = canvas.getBoundingClientRect();
@@ -753,7 +790,8 @@ function draw() {
         const deg = state.degrees[i];
         ctx.beginPath();
         
-        const nodeR = Math.max(16, width * 0.03); 
+        // Responsive Radius
+        const nodeR = Math.max(12, width * 0.035); 
         ctx.arc(pos.x, pos.y, nodeR, 0, Math.PI*2);
         
         if(deg===1) {
@@ -792,7 +830,6 @@ if (nRange) nRange.oninput = (e) => {
     startGame();
 };
 
-// Use the ID in HTML to grab the Play Again button safely
 const playAgainBtn = document.getElementById('playAgainBtn');
 if (playAgainBtn) playAgainBtn.onclick = startGame;
 
