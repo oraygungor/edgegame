@@ -77,10 +77,10 @@
 </head>
 <body id="mainBody" class="min-h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative overflow-y-auto lg:overflow-hidden">
 
-    <!-- Selection Screen -->
+    <!-- Character Selection Screen -->
     <div id="selection-screen">
         <h1 class="text-4xl md:text-6xl font-black text-white tracking-tighter mb-4 drop-shadow-lg text-center">EDGE <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">MASTER</span></h1>
-        <p class="text-slate-400 text-sm md:text-lg mb-12 font-medium tracking-wide">Choose your character</p>
+        <p class="text-slate-400 text-sm md:text-lg mb-12 font-medium tracking-wide">Please choose your character</p>
         
         <div class="flex flex-col md:flex-row gap-6">
             <button onclick="startGameAs(0)" class="group w-64 p-8 bg-slate-800/50 border-2 border-slate-700 rounded-3xl hover:border-purple-500 hover:bg-purple-500/10 transition-all duration-300">
@@ -103,15 +103,11 @@
             <h1 class="text-4xl md:text-6xl font-black text-white tracking-tighter mb-1 drop-shadow-lg">EDGE <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">MASTER</span></h1>
             <p class="text-slate-400 text-xs md:text-sm font-medium tracking-[0.2em] uppercase">Invincible Isolation Engine</p>
         </div>
-        <div class="hidden gap-4">
-            <div id="visit-count"></div>
-            <div id="win-rate"></div>
-        </div>
     </div>
 
     <!-- Main Layout -->
     <div class="flex flex-col-reverse lg:flex-row gap-6 w-full max-w-7xl flex-1 min-h-0 relative z-10">
-        <!-- Sidebar (Controls) -->
+        <!-- Sidebar -->
         <div class="w-full lg:w-80 flex flex-col gap-4 z-10 shrink-0">
             <!-- AI Status -->
             <div class="panel-card flex-1 flex flex-col justify-center items-center text-center relative transition-colors duration-1000 order-1 lg:order-2" id="status-panel">
@@ -135,13 +131,13 @@
             </div>
 
             <!-- Controls -->
-            <div class="panel-card flex flex-col gap-6 order-2 lg:order-1">
+            <div class="panel-card flex flex-col gap-4 order-2 lg:order-1">
                 <div>
                     <div class="flex justify-between items-center mb-3">
                         <label class="text-xs font-bold text-slate-400 uppercase tracking-widest">Map Size</label>
                         <span class="text-xs font-mono text-purple-400 bg-purple-400/10 px-2 py-1 rounded">N = <span id="n-val">9</span></span>
                     </div>
-                    <input type="range" id="nRange" min="6" max="10" value="9" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 hover:accent-purple-400 transition-all">
+                    <input type="range" id="nRange" min="4" max="10" value="9" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 hover:accent-purple-400 transition-all">
                 </div>
 
                 <div class="flex items-center gap-3 bg-black/20 p-3 rounded-xl border border-white/5">
@@ -149,8 +145,13 @@
                     <label for="aiVsAi" class="text-sm font-semibold text-slate-300 cursor-pointer select-none">AI plays against itself</label>
                 </div>
 
-                <button id="resetBtn" onclick="showSelection()" class="group w-full py-4 bg-white text-slate-900 font-black rounded-xl text-sm transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+                <button id="resetBtn" onclick="restartCurrentGame()" class="group w-full py-3 bg-white text-slate-900 font-black rounded-xl text-xs transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
                     <span class="group-hover:rotate-180 transition-transform duration-500">↻</span> START NEW GAME
+                </button>
+
+                <!-- Change Player Button -->
+                <button id="changePlayerBtn" onclick="showSelection()" class="group w-full py-3 bg-slate-800 text-slate-300 font-bold border border-slate-600 rounded-xl text-xs transition-all hover:bg-slate-700 active:scale-95 flex items-center justify-center gap-2">
+                    👤 CHANGE PLAYER
                 </button>
             </div>
             
@@ -165,7 +166,7 @@
                 <div id="overlay-icon" class="text-6xl mb-4">🏆</div>
                 <h2 id="overlayTitle" class="text-4xl md:text-7xl font-black text-white mb-4 tracking-tighter drop-shadow-2xl text-center">YOU WON</h2>
                 <p id="overlaySub" class="text-slate-400 text-base md:text-lg font-medium mb-10 tracking-wide">You outsmarted the AI.</p>
-                <button onclick="showSelection()" class="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-full shadow-2xl hover:scale-105 transition-transform active:scale-95 text-lg tracking-wide">
+                <button onclick="restartCurrentGame()" class="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-full shadow-2xl hover:scale-105 transition-transform active:scale-95 text-lg tracking-wide">
                     PLAY AGAIN
                 </button>
             </div>
@@ -361,7 +362,7 @@ function updateTheme(turn) {
     }
 }
 
-const THINKING_PHRASES = ["Analyzing Strategy...", "Calculating Odds...", "Checking Traps...", "Simulating Future...", "Scanning Weaknesses..."];
+const AI_PHRASES = ["Analyzing Strategy...", "Calculating Odds...", "Checking Traps...", "Simulating Future...", "Scanning Weaknesses..."];
 
 function setUIState(state) {
     if (state === 'thinking') {
@@ -369,9 +370,9 @@ function setUIState(state) {
         ui.aiPulse.classList.add('animate-ping', 'opacity-100');
         ui.aiAvatar.classList.add('border-purple-500', 'shadow-[0_0_30px_rgba(168,85,247,0.4)]');
         ui.aiEmoji.innerText = "🤖";
-        ui.turnText.innerText = (game.turn === 0 ? "Alice (AI)" : "Bob (AI)") + " is Thinking";
+        ui.turnText.innerText = (game.turn === 0 ? "Alice (AI)" : "Bob (AI)") + " Thinking";
         ui.turnText.className = "text-lg font-bold text-purple-400 mb-1";
-        ui.subText.innerText = THINKING_PHRASES[Math.floor(Math.random() * THINKING_PHRASES.length)];
+        ui.subText.innerText = AI_PHRASES[Math.floor(Math.random() * AI_PHRASES.length)];
         ui.thinkingUI.classList.remove('opacity-0');
         canvas.style.cursor = "wait";
     } else {
@@ -395,8 +396,11 @@ function showSelection() {
 function startGameAs(playerIndex) {
     ui.selectionScreen.style.opacity = '0';
     setTimeout(() => ui.selectionScreen.style.visibility = 'hidden', 500);
-    
     game.userPlayer = playerIndex;
+    restartCurrentGame();
+}
+
+function restartCurrentGame() {
     game.id++;
     game.n = parseInt(ui.nRange.value);
     const startState = new GraphState(game.n);
@@ -531,8 +535,13 @@ function draw() {
 
 window.startGameAs = startGameAs;
 window.showSelection = showSelection;
+window.restartCurrentGame = restartCurrentGame;
+
 document.getElementById('clearBrain').onclick = () => { if(confirm('Clear AI memory?')) brain.clear(); };
-document.getElementById('nRange').oninput = (e) => { document.getElementById('n-val').innerText = e.target.value; showSelection(); };
+document.getElementById('nRange').oninput = (e) => { 
+    document.getElementById('n-val').innerText = e.target.value; 
+    restartCurrentGame(); 
+};
 
 resizeCanvas();
 } 
