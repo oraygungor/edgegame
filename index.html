@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,7 +16,7 @@
         
         /* Modern Canvas Container */
         .canvas-container {
-            background: rgba(15, 23, 42, 0.6); /* Transparan */
+            background: rgba(15, 23, 42, 0.6); 
             border-radius: 24px;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1);
             position: relative;
@@ -63,7 +63,7 @@
         .theme-bob { background-color: #022c22; background-image: radial-gradient(circle at 50% 0%, #064e3b 0%, #022c22 70%); }
     </style>
 </head>
-<body id="mainBody" class="h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice">
+<body id="mainBody" class="h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative">
 
     <!-- Header -->
     <div class="w-full max-w-7xl flex flex-col md:flex-row justify-between items-end gap-6 z-10">
@@ -72,21 +72,15 @@
             <p class="text-slate-400 text-sm font-medium tracking-[0.2em] uppercase">Invincible Isolation Engine</p>
         </div>
 
-        <div class="flex gap-4">
-            <!-- Stats -->
-            <div class="bg-black/30 px-5 py-3 rounded-2xl border border-white/10 text-center backdrop-blur-md">
-                <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Memory</div>
-                <div id="visit-count" class="text-xl font-bold text-purple-400">0</div>
-            </div>
-            <div class="bg-black/30 px-5 py-3 rounded-2xl border border-white/10 text-center backdrop-blur-md">
-                <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Win Chance</div>
-                <div id="win-rate" class="text-xl font-bold text-white">--</div>
-            </div>
+        <!-- Hidden Stats (Kept for Logic Compatibility) -->
+        <div class="hidden gap-4">
+            <div id="visit-count"></div>
+            <div id="win-rate"></div>
         </div>
     </div>
 
     <!-- Main Layout -->
-    <div class="flex flex-col lg:flex-row gap-6 w-full max-w-7xl flex-1 min-h-0">
+    <div class="flex flex-col lg:flex-row gap-6 w-full max-w-7xl flex-1 min-h-0 relative z-10">
         
         <!-- Sidebar -->
         <div class="w-full lg:w-80 flex flex-col gap-4 z-10 shrink-0">
@@ -141,6 +135,8 @@
                     </div>
                 </div>
             </div>
+            
+            <button id="clearBrain" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors text-center pb-2">Reset AI Memory</button>
         </div>
 
         <!-- Canvas -->
@@ -152,11 +148,18 @@
                 <div id="overlay-icon" class="text-6xl mb-4">🏆</div>
                 <h2 id="overlayTitle" class="text-5xl lg:text-7xl font-black text-white mb-4 tracking-tighter drop-shadow-2xl text-center">YOU WON</h2>
                 <p id="overlaySub" class="text-slate-400 text-lg font-medium mb-10 tracking-wide">You outsmarted the AI.</p>
-                <button onclick="startGame()" class="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-full shadow-2xl hover:scale-105 transition-transform active:scale-95 text-lg tracking-wide">
+                <button id="playAgainBtn" class="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-full shadow-2xl hover:scale-105 transition-transform active:scale-95 text-lg tracking-wide">
                     PLAY AGAIN
                 </button>
             </div>
         </div>
+    </div>
+
+    <!-- Footer Reference -->
+    <div class="absolute bottom-2 w-full text-center z-0 pointer-events-none">
+        <p class="text-[10px] text-slate-600 font-medium pointer-events-auto">
+            This game is based on the question at <a href="https://puzzling.stackexchange.com/questions/131519/edge-removal-game" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-purple-400 transition-colors underline decoration-slate-700 underline-offset-2">StackExchange</a>
+        </p>
     </div>
 
 <script>
@@ -189,6 +192,10 @@ class GhostBrain {
         const entry = this.memory[key];
         entry.N++;
         entry.W += z;
+    }
+    clear() {
+        this.memory = {};
+        localStorage.removeItem('edge_master_brain_v2');
     }
 }
 const brain = new GhostBrain();
@@ -349,6 +356,7 @@ class AIEngine {
             if (moves.length === 1 && tempState.degrees[tempState.edges[moves[0]].u] === 1) return (simTurn === turn) ? 1.0 : 0.0;
             
             let candidates = moves;
+            // Rollout Heuristic
             if (moves.length > 1) {
                  const safe = moves.filter(m => {
                      const e = tempState.edges[m];
@@ -452,7 +460,7 @@ let game = {
     animatingEdges: [] // Stores visual fade out effects
 };
 
-// Canvas Resizing
+// Canvas Resizing with Pixel Ratio Support
 function resizeCanvas() {
     const parent = canvas.parentElement;
     const dpr = window.devicePixelRatio || 1;
@@ -486,10 +494,10 @@ function initNodePositions() {
 
 function updateTheme(turn) {
     if (turn === 0) { // Alice (AI)
-        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice";
+        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-alice relative";
         ui.gameContainer.style.boxShadow = "inset 0 0 40px rgba(168, 85, 247, 0.1)";
     } else { // Bob (Player)
-        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-bob";
+        ui.body.className = "h-screen flex flex-col items-center justify-center p-4 lg:p-8 gap-6 theme-bob relative";
         ui.gameContainer.style.boxShadow = "inset 0 0 40px rgba(16, 185, 129, 0.1)";
     }
 }
@@ -539,6 +547,7 @@ function startGame() {
     game.gameOver = false;
     
     ui.overlay.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+    // Stats are hidden by CSS now, but updating them anyway in case logic needs them
     ui.statsVisit.innerText = brain.memory ? Object.keys(brain.memory).length : 0;
     ui.statsWin.innerText = "--";
     
@@ -645,7 +654,6 @@ function getEdgeAt(x, y) {
     let best = null, minDist = 40; 
     const state = game.engine.rootState;
     const dpr = window.devicePixelRatio || 1;
-    // Input is CSS pixels, visual nodes are CSS pixels scaled in initNodePositions
     
     for (let i=0; i<state.num_edges; i++) {
         if (!((state.activeMask >> BigInt(i)) & 1n)) continue;
@@ -718,7 +726,6 @@ function draw() {
     }
 
     // 2. Draw Ghost (Animating) Edges
-    // Remove old animations
     game.animatingEdges = game.animatingEdges.filter(anim => (now - anim.startTime) < anim.duration);
     
     for(const anim of game.animatingEdges) {
@@ -769,12 +776,27 @@ function draw() {
 
 // Global scope
 window.startGame = startGame;
-document.getElementById('resetBtn').onclick = startGame;
-document.getElementById('nRange').oninput = (e) => {
+
+// Safe Event Listeners
+const resetBtn = document.getElementById('resetBtn');
+if (resetBtn) resetBtn.onclick = startGame;
+
+const clearBrain = document.getElementById('clearBrain');
+if (clearBrain) clearBrain.onclick = () => {
+    if(confirm('Do you want to clear all learned AI strategies?')) brain.clear();
+};
+
+const nRange = document.getElementById('nRange');
+if (nRange) nRange.oninput = (e) => {
     document.getElementById('n-val').innerText = e.target.value;
     startGame();
 };
 
+// Use the ID in HTML to grab the Play Again button safely
+const playAgainBtn = document.getElementById('playAgainBtn');
+if (playAgainBtn) playAgainBtn.onclick = startGame;
+
+// Init
 resizeCanvas();
 setTimeout(startGame, 100);
 
