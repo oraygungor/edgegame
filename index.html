@@ -411,7 +411,8 @@ function restartCurrentGame() {
     initNodePositions();
     drawLoop();
     
-    if (game.userPlayer !== 0 && !ui.aiVsAi.checked) {
+    // Check if AI should start (either it's AI turn or AI vs AI mode is on)
+    if (ui.aiVsAi.checked || game.turn !== game.userPlayer) {
         setTimeout(() => runAITurn(game.id), 800);
     } else {
         setUIState('player');
@@ -479,25 +480,25 @@ function getEdgeAt(x, y, tolerance = 30) {
 }
 
 canvas.addEventListener('touchstart', e => {
-    if (game.turn !== game.userPlayer || game.gameOver) return;
+    if (game.turn !== game.userPlayer || game.gameOver || ui.aiVsAi.checked) return;
     const rect = canvas.getBoundingClientRect(); const touch = e.touches[0];
     const x = touch.clientX - rect.left; const y = touch.clientY - rect.top;
     game.hoveredEdge = getEdgeAt(x, y, 60); draw();
 }, {passive: false});
 
 canvas.addEventListener('touchend', e => {
-    if (game.gameOver || game.turn !== game.userPlayer) return;
+    if (game.gameOver || game.turn !== game.userPlayer || ui.aiVsAi.checked) return;
     if (game.hoveredEdge !== null) { applyMove(game.hoveredEdge); game.hoveredEdge = null; }
 }, {passive: false});
 
 canvas.addEventListener('mousemove', e => {
-    if (game.turn !== game.userPlayer || game.gameOver) return;
+    if (game.turn !== game.userPlayer || game.gameOver || ui.aiVsAi.checked) return;
     const r = canvas.getBoundingClientRect(); game.hoveredEdge = getEdgeAt(e.clientX - r.left, e.clientY - r.top);
     canvas.style.cursor = game.hoveredEdge !== null ? 'pointer' : 'crosshair';
 });
 
 canvas.addEventListener('click', e => {
-    if (game.gameOver || game.turn !== game.userPlayer) return;
+    if (game.gameOver || game.turn !== game.userPlayer || ui.aiVsAi.checked) return;
     if (game.hoveredEdge !== null) { applyMove(game.hoveredEdge); game.hoveredEdge = null; }
 });
 
@@ -511,7 +512,7 @@ function draw() {
         if(!((state.activeMask >> BigInt(i)) & 1n)) continue;
         const e = state.edges[i]; const n1 = game.nodes[e.u], n2 = game.nodes[e.v];
         ctx.beginPath(); ctx.moveTo(n1.x, n1.y); ctx.lineTo(n2.x, n2.y);
-        if (i === game.hoveredEdge && game.turn === game.userPlayer) { ctx.lineWidth = 6; ctx.strokeStyle = '#34d399'; ctx.shadowColor = '#34d399'; ctx.shadowBlur = 15; } 
+        if (i === game.hoveredEdge && game.turn === game.userPlayer && !ui.aiVsAi.checked) { ctx.lineWidth = 6; ctx.strokeStyle = '#34d399'; ctx.shadowColor = '#34d399'; ctx.shadowBlur = 15; } 
         else { ctx.lineWidth = 2; ctx.strokeStyle = '#334155'; ctx.shadowBlur = 0; }
         ctx.setLineDash([]); ctx.stroke(); ctx.shadowBlur = 0;
     }
@@ -541,6 +542,13 @@ document.getElementById('clearBrain').onclick = () => { if(confirm('Clear AI mem
 document.getElementById('nRange').oninput = (e) => { 
     document.getElementById('n-val').innerText = e.target.value; 
     restartCurrentGame(); 
+};
+
+// Handle "AI vs AI" checkbox changes during the game
+ui.aiVsAi.onchange = () => {
+    if (ui.aiVsAi.checked && !game.gameOver && game.turn === game.userPlayer) {
+        runAITurn(game.id);
+    }
 };
 
 resizeCanvas();
