@@ -128,6 +128,7 @@
                         <div id="thinking-bar" class="thinking-bar"></div>
                     </div>
                 </div>
+                <div id="model-status" class="mt-2 text-[10px] text-slate-500 font-mono"></div>
             </div>
 
             <!-- Controls -->
@@ -191,19 +192,104 @@ class GhostBrain {
 }
 const brain = new GhostBrain();
 
+// ---- ML Value Model Loader (Logistic Regression) ----
+const MLModels = {
+  // n -> { w: number[] }
+  models: new Map(),
+  // baseUrl: path to where your JSON models are stored (e.g. ./models/k9_value.json)
+  baseUrl: "./models",
+  
+  async loadForN(n) {
+    if (this.models.has(n)) return this.models.get(n);
+    const url = `${this.baseUrl}/k${n}_value.json`;
+    try {
+        const res = await fetch(url, { cache: "force-cache" });
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const data = await res.json();
+        this.models.set(n, data);
+        return data;
+    } catch(e) {
+        throw new Error(`Failed load n=${n}: ${e.message}`);
+    }
+  },
+  
+  sigmoid(x) {
+    if (x >= 0) {
+      const z = Math.exp(-x);
+      return 1 / (1 + z);
+    } else {
+      const z = Math.exp(x);
+      return z / (1 + z);
+    }
+  },
+
+  features(state) {
+    const n = state.n;
+    const totalEdges = (n * (n - 1)) / 2;
+    // Optimization: Read directly from state property O(1) instead of bit counting
+    const remEdges = state.edgesRemaining;
+    const deg = state.degrees; // Int8Array
+
+    const hist = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      const d = deg[i];
+      if (d >= 0 && d < n) hist[d]++;
+    }
+
+    let sum = 0, minD = 1e9, maxD = -1e9, sumSq = 0;
+    for (let i = 0; i < n; i++) {
+      const d = deg[i];
+      sum += d;
+      sumSq += d * d;
+      if (d < minD) minD = d;
+      if (d > maxD) maxD = d;
+    }
+    const avg = sum / n;
+    const meanSq = sumSq / n;
+    const denom = Math.max(1, n - 1);
+
+    const x = [];
+    x.push(1.0); // bias
+    x.push(remEdges / totalEdges);
+    for (let d = 0; d < n; d++) x.push(hist[d] / n);
+    x.push(avg / denom);
+    x.push(minD / denom);
+    x.push(maxD / denom);
+    x.push((hist[1] || 0) / n);
+    x.push((hist[2] || 0) / n);
+    x.push(meanSq / (denom * denom));
+    return x; // length = n + 8
+  },
+
+  predict(state, model) {
+    const x = this.features(state);
+    const w = model.w;
+    let s = 0;
+    const L = Math.min(w.length, x.length);
+    for (let i = 0; i < L; i++) s += w[i] * x[i];
+    return this.sigmoid(s); // in [0,1]
+  }
+};
+
 class GraphState {
-    constructor(n, activeMask = null, degrees = null, edges = null) {
+    constructor(n, activeMask = null, degrees = null, edges = null, edgesRemaining = null) {
         this.n = n;
         if (activeMask === null) {
             this.edges = []; let idx = 0;
             for (let u = 0; u < n; u++) for (let v = u + 1; v < n; v++) { this.edges.push({ u, v, idx }); idx++; }
-            this.num_edges = idx; this.activeMask = (1n << BigInt(this.num_edges)) - 1n;
+            this.num_edges = idx; 
+            this.activeMask = (1n << BigInt(this.num_edges)) - 1n;
             this.degrees = new Int8Array(n).fill(n - 1);
+            this.edgesRemaining = this.num_edges;
         } else {
-            this.edges = edges; this.activeMask = activeMask; this.degrees = new Int8Array(degrees); this.num_edges = edges.length;
+            this.edges = edges; 
+            this.activeMask = activeMask; 
+            this.degrees = new Int8Array(degrees); 
+            this.num_edges = edges.length;
+            this.edgesRemaining = edgesRemaining;
         }
     }
-    clone() { return new GraphState(this.n, this.activeMask, this.degrees, this.edges); }
+    clone() { return new GraphState(this.n, this.activeMask, this.degrees, this.edges, this.edgesRemaining); }
     getHash(turn) { return `n${this.n}_${this.activeMask.toString()}_t${turn}`; }
     getLegalMoves() {
         const moves = [];
@@ -219,7 +305,11 @@ class GraphState {
     doMove(moveIdx) {
         if (!((this.activeMask >> BigInt(moveIdx)) & 1n)) return false;
         this.activeMask &= ~(1n << BigInt(moveIdx));
-        const e = this.edges[moveIdx]; this.degrees[e.u]--; this.degrees[e.v]--; return true;
+        const e = this.edges[moveIdx]; 
+        this.degrees[e.u]--; 
+        this.degrees[e.v]--; 
+        this.edgesRemaining--;
+        return true;
     }
     isTerminal() { for(let i=0; i<this.n; i++) if(this.degrees[i] === 0) return true; return false; }
 }
@@ -273,7 +363,21 @@ class AIEngine {
     }
     evaluate(state, turn) {
         if (state.isTerminal()) return 0.0; 
-        const hash = state.getHash(turn); const storedVal = brain.getValue(hash); if (storedVal !== null) return storedVal; 
+
+        // 1. ML Model Prediction (Priority #1)
+        // If a specialized model exists, trust it more than local "ghost" stats.
+        const model = MLModels.models.get(state.n);
+        if (model) {
+            const p = MLModels.predict(state, model);
+            return p;
+        }
+
+        // 2. Exact Memory (GhostBrain) (Priority #2)
+        const hash = state.getHash(turn); 
+        const storedVal = brain.getValue(hash); 
+        if (storedVal !== null) return storedVal; 
+
+        // 3. Rollout Fallback
         let tempState = state.clone(); let simTurn = turn; let movesCount = 0;
         while (true) {
             const moves = tempState.getLegalMoves(); if (moves.length === 0) break; 
@@ -331,7 +435,8 @@ const ui = {
     overlaySub: document.getElementById('overlaySub'),
     overlayIcon: document.getElementById('overlay-icon'),
     aiVsAi: document.getElementById('aiVsAi'),
-    selectionScreen: document.getElementById('selection-screen')
+    selectionScreen: document.getElementById('selection-screen'),
+    modelStatus: document.getElementById('model-status')
 };
 
 let game = { id: 0, n: 9, engine: null, nodes: [], turn: 0, gameOver: false, hoveredEdge: null, history: [], animatingEdges: [], userPlayer: 0 };
@@ -403,6 +508,13 @@ function startGameAs(playerIndex) {
 function restartCurrentGame() {
     game.id++;
     game.n = parseInt(ui.nRange.value);
+    
+    // Attempt to load ML model for this N
+    ui.modelStatus.innerText = `Loading brain for N=${game.n}...`;
+    MLModels.loadForN(game.n)
+        .then(() => ui.modelStatus.innerText = `ML Brain Active (N=${game.n})`)
+        .catch(err => ui.modelStatus.innerText = `Using Basic Logic (No Model found for N=${game.n})`);
+
     const startState = new GraphState(game.n);
     game.engine = new AIEngine(startState, 0); 
     game.history = []; game.animatingEdges = []; game.turn = 0; game.gameOver = false;
