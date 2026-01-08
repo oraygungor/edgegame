@@ -442,9 +442,21 @@ const ui = {
 let game = { id: 0, n: 9, engine: null, nodes: [], turn: 0, gameOver: false, hoveredEdge: null, history: [], animatingEdges: [], userPlayer: 0 };
 
 function resizeCanvas() {
-    const parent = canvas.parentElement; const dpr = window.devicePixelRatio || 1; const rect = parent.getBoundingClientRect();
-    canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.scale(dpr, dpr);
-    if(game.nodes.length > 0) { initNodePositions(); draw(); }
+    const parent = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = parent.getBoundingClientRect();
+
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+
+    // IMPORTANT: reset transform so we don't scale repeatedly
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    if (game.nodes.length > 0) {
+        initNodePositions();
+        draw();
+    }
 }
 window.addEventListener('resize', resizeCanvas);
 
